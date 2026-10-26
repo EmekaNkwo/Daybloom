@@ -4,6 +4,7 @@ import com.daybloom.domain.models.ReminderOccurrence
 import com.daybloom.domain.repositories.PreferencesRepository
 import com.daybloom.domain.repositories.ReminderRepository
 import com.daybloom.domain.repositories.ScheduledRecord
+import com.daybloom.domain.repositories.TaskRepository
 import com.daybloom.domain.services.ReminderOccurrenceCalculator
 import com.daybloom.platform.PlatformDateTimeService
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -58,6 +59,7 @@ class ReminderReconciler(
     private val scheduler: NotificationScheduler,
     private val permissions: NotificationPermissionManager,
     private val preferences: PreferencesRepository,
+    private val tasks: TaskRepository,
     private val clock: PlatformDateTimeService,
 ) {
     private val mutex = Mutex()
@@ -93,11 +95,11 @@ class ReminderReconciler(
         // cancelled. Only when their reminder is gone is a still-waiting alarm cancelled — never a shown notification.
         val pastRecords = persisted.filter { it.fireAt <= now }
         val fired = pastRecords.map { it.id }.toSet()
-        val activeIds = reminders.getActive().map { it.id }.toSet()
+        val activeIds = reminders.getActive().map { it.id }.toSet() + DailyTaskDigest.ids
         val firedOrphans = pastRecords.filter { it.reminderId !in activeIds }.map { it.id }.toSet()
         val stale = persisted.filter { record ->
             val wanted = desiredById[record.id]
-            record.id !in fired && (wanted == null || contentHash(wanted) != record.contentHash)
+            record.id !in fired && (wanted == null || contentHash(wanted, capabilities.exactTiming) != record.contentHash)
         }.map { it.id }.toSet()
         // Orphans: the OS holds a reminder occurrence we no longer want (e.g. after a data reset). Only ids in the
         // occurrence-key format are touched, so other notifications the app shows are left alone.
@@ -105,7 +107,7 @@ class ReminderReconciler(
 
         val toSchedule = desired.filter { occ ->
             val record = persistedById[occ.key]
-            forceAll || record == null || record.contentHash != contentHash(occ) || occ.key !in osPending
+            forceAll || record == null || record.contentHash != contentHash(occ, capabilities.exactTiming) || occ.key !in osPending
         }
 
         val toCancel = stale + orphans
@@ -119,7 +121,7 @@ class ReminderReconciler(
 
         reminders.removeScheduled(stale + (persistedById.keys - desiredById.keys))
         reminders.recordScheduled(
-            toSchedule.map { ScheduledRecord(it.key, it.reminderId, it.fireAt, contentHash(it)) },
+            toSchedule.map { ScheduledRecord(it.key, it.reminderId, it.fireAt, contentHash(it, capabilities.exactTiming)) },
             now,
         )
 
@@ -135,16 +137,28 @@ class ReminderReconciler(
         result
     }
 
+    /**
+     * Cancels everything this app has handed to the OS. Used before wiping data: afterwards there are no records
+     * to diff against, and Android can only cancel ids it's told about.
+     */
+    suspend fun cancelAll() = mutex.withLock {
+        val ids = reminders.getScheduled().map { it.id }
+        if (ids.isNotEmpty()) scheduler.cancel(ids)
+        reminders.clearScheduled()
+    }
+
     /** Refreshes permission/capability info without touching the schedule. */
     suspend fun refreshStatus() {
         _status.value = _status.value.copy(status = permissions.status(), capabilities = scheduler.capabilities())
     }
 
     private suspend fun desiredOccurrences(now: Instant, maxPending: Int): List<ReminderOccurrence> {
-        val quietHours = preferences.current().quietHours
+        val prefs = preferences.current()
         val windowEnd = now + WINDOW_DAYS.days
+        val digests = DailyTaskDigest.occurrences(tasks.getOpen(), prefs.morningDigestTime, prefs.eveningDigestTime, now, clock.timeZone())
         return reminders.getActive()
-            .flatMap { ReminderOccurrenceCalculator.occurrences(it, now, windowEnd, clock.timeZone(), quietHours) }
+            .flatMap { ReminderOccurrenceCalculator.occurrences(it, now, windowEnd, clock.timeZone(), prefs.quietHours) }
+            .plus(digests)
             .sortedBy { it.fireAt }
             .take(maxPending.coerceAtLeast(1))
     }
@@ -158,8 +172,12 @@ class ReminderReconciler(
         /** Occurrence keys look like "reminderId@epochMillis" (see [ReminderOccurrence.key]). */
         fun isOccurrenceKey(id: String): Boolean = id.substringAfterLast('@', "").toLongOrNull() != null
 
-        fun contentHash(occurrence: ReminderOccurrence): String =
-            listOf(occurrence.title, occurrence.body, occurrence.category.name, occurrence.fireAt.toEpochMilliseconds())
+        /**
+         * Includes whether the alarm was set exactly: when exact-alarm access is granted or revoked, every pending
+         * alarm differs from its record and is re-set the new way.
+         */
+        fun contentHash(occurrence: ReminderOccurrence, exact: Boolean): String =
+            listOf(occurrence.title, occurrence.body, occurrence.category.name, occurrence.fireAt.toEpochMilliseconds(), exact)
                 .joinToString("|")
                 .hashCode()
                 .toString(16)

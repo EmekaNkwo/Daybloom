@@ -1,5 +1,9 @@
 package com.daybloom.features.tasks
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.daybloom.domain.models.Priority
@@ -49,7 +53,6 @@ data class TasksState(
 }
 
 private data class Filters(
-    val query: String = "",
     val status: StatusFilter = StatusFilter.OPEN,
     val date: DateFilter = DateFilter.ANY,
     val categories: Set<TaskCategory> = emptySet(),
@@ -65,13 +68,20 @@ class TasksViewModel(
 ) : ViewModel() {
     private val filters = MutableStateFlow(Filters())
 
-    val state: StateFlow<TasksState> = combine(tasks.observeAll(), filters, clock.todayFlow()) { all, f, today ->
-        val base = TaskFilter(query = f.query, categories = f.categories, priorities = f.priorities, statuses = f.status.statuses)
+    /**
+     * The search text is snapshot state, not part of [state]: the field must update in the same frame as each keystroke.
+     * Routing it through the filtered-list pipeline made the field lag behind fast typing and drop or reorder characters.
+     */
+    var query by mutableStateOf("")
+        private set
+
+    val state: StateFlow<TasksState> = combine(tasks.observeAll(), filters, snapshotFlow { query }, clock.todayFlow()) { all, f, q, today ->
+        val base = TaskFilter(query = q, categories = f.categories, priorities = f.priorities, statuses = f.status.statuses)
         val matches = all.filter(base::matches).filter { matchesDate(it, f.date, today) }
         TasksState(
             loading = false,
             today = today,
-            query = f.query,
+            query = q,
             status = f.status,
             dateFilter = f.date,
             categories = f.categories,
@@ -81,12 +91,17 @@ class TasksViewModel(
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TasksState())
 
-    fun setQuery(q: String) = filters.update { it.copy(query = q.take(100)) }
+    fun onQueryChange(q: String) {
+        query = q.take(100)
+    }
     fun setStatus(s: StatusFilter) = filters.update { it.copy(status = s) }
     fun setDateFilter(d: DateFilter) = filters.update { it.copy(date = d) }
     fun toggleCategory(c: TaskCategory) = filters.update { it.copy(categories = it.categories.toggle(c)) }
     fun togglePriority(p: Priority) = filters.update { it.copy(priorities = it.priorities.toggle(p)) }
-    fun clearFilters() = filters.update { Filters(status = it.status) }
+    fun clearFilters() {
+        query = ""
+        filters.update { Filters(status = it.status) }
+    }
 
     fun toggle(task: Task, done: Boolean) = runAction(messages, "Couldn't update that task.") {
         if (done) {

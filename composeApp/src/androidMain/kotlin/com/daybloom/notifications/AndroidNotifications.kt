@@ -45,7 +45,7 @@ object NotificationChannels {
         NotificationCategory.entries.forEach { category ->
             val importance = when (category) {
                 NotificationCategory.APPOINTMENTS, NotificationCategory.TASKS, NotificationCategory.BILLS -> NotificationManager.IMPORTANCE_HIGH
-                NotificationCategory.HABITS, NotificationCategory.GENERAL -> NotificationManager.IMPORTANCE_DEFAULT
+                NotificationCategory.HABITS, NotificationCategory.GENERAL, NotificationCategory.DIGEST -> NotificationManager.IMPORTANCE_DEFAULT
             }
             manager.createNotificationChannel(
                 NotificationChannel(category.channelId, category.label, importance).apply {
@@ -70,7 +70,7 @@ class AndroidNotificationScheduler(private val context: Context) : NotificationS
         return SchedulerCapabilities(
             maxPending = MAX_PENDING,
             exactTiming = exact,
-            limitation = if (exact) null else "Exact alarms are off, so reminders may arrive a few minutes late. Battery savers can delay them further.",
+            limitation = if (exact) null else "On-time reminders are off, so Android may deliver them up to an hour late. Battery savers can delay them further.",
         )
     }
 
@@ -156,10 +156,11 @@ internal object ReminderNotificationBuilder {
         val contentIntent = launch?.let {
             PendingIntent.getActivity(context, id.hashCode(), it, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         }
-        val notification = NotificationCompat.Builder(context, category.channelId)
+        val builder = NotificationCompat.Builder(context, category.channelId)
             .setSmallIcon(R.drawable.ic_stat_daybloom)
             .setContentTitle(title)
             .setContentText(body.ifBlank { "Reminder from DayBloom" })
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body.ifBlank { "Reminder from DayBloom" }))
             .setCategory(if (category == NotificationCategory.APPOINTMENTS) NotificationCompat.CATEGORY_EVENT else NotificationCompat.CATEGORY_REMINDER)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
@@ -167,9 +168,13 @@ internal object ReminderNotificationBuilder {
             .setShowWhen(true)
             .setContentIntent(contentIntent)
             .setDeleteIntent(responseIntent(context, id, reminderId, fireAt, "DISMISS"))
-            .addAction(0, "Done", responseIntent(context, id, reminderId, fireAt, "DONE"))
-            .addAction(0, "Snooze 10 min", responseIntent(context, id, reminderId, fireAt, "SNOOZE"))
-            .build()
+        // A digest summarises several tasks, so a single Done / Snooze wouldn't mean anything.
+        if (category != NotificationCategory.DIGEST) {
+            builder
+                .addAction(0, "Done", responseIntent(context, id, reminderId, fireAt, "DONE"))
+                .addAction(0, "Snooze 10 min", responseIntent(context, id, reminderId, fireAt, "SNOOZE"))
+        }
+        val notification = builder.build()
         try {
             NotificationManagerCompat.from(context).notify(id, NotificationContract.NOTIFICATION_ID, notification)
         } catch (e: SecurityException) {

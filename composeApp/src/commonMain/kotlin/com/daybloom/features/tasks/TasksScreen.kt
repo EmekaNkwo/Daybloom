@@ -63,13 +63,13 @@ fun TasksScreen(
             Column(Modifier.padding(horizontal = Spacing.screenGutter), verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                 ScreenHeader("Tasks")
                 BloomTextField(
-                    value = state.query,
-                    onValueChange = viewModel::setQuery,
+                    value = viewModel.query,
+                    onValueChange = viewModel::onQueryChange,
                     modifier = Modifier.fillMaxWidth(),
                     placeholder = { Text("Search tasks, notes and tags", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                     trailingIcon = {
-                        if (state.query.isNotEmpty()) IconButton(onClick = { viewModel.setQuery("") }) { Icon(Icons.Filled.Clear, "Clear search") }
+                        if (viewModel.query.isNotEmpty()) IconButton(onClick = { viewModel.onQueryChange("") }) { Icon(Icons.Filled.Clear, "Clear search") }
                     },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),

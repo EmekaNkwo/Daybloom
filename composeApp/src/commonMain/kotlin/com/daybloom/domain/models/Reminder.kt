@@ -20,6 +20,7 @@ enum class NotificationCategory(val channelId: String, val label: String) {
     HABITS("daybloom_habits", "Habits"),
     BILLS("daybloom_bills", "Bills & payments"),
     GENERAL("daybloom_general", "General reminders"),
+    DIGEST("daybloom_digest", "Daily task summary"),
 }
 
 enum class ReminderStatus { ACTIVE, COMPLETED, DISMISSED, EXPIRED }

@@ -268,6 +268,7 @@ class DeleteTaskUseCase(
 
 class DuplicateTaskUseCase(
     private val tasks: TaskRepository,
+    private val reminderSync: SyncSourceRemindersUseCase,
     private val process: ProcessProgressUseCase,
     private val ids: IdGenerator,
     private val clock: PlatformDateTimeService,
@@ -291,6 +292,7 @@ class DuplicateTaskUseCase(
             cancelledAt = null,
         )
         tasks.save(copy)
+        reminderSync.refreshTaskDigests()
         process(copy.dueDate)
         return copy
     }

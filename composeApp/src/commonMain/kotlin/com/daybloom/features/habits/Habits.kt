@@ -105,7 +105,12 @@ data class HabitCard(
     val doneToday: Boolean,
 )
 
-data class HabitsState(val loading: Boolean = true, val today: LocalDate? = null, val cards: List<HabitCard> = emptyList())
+data class HabitsState(
+    val loading: Boolean = true,
+    val today: LocalDate? = null,
+    val cards: List<HabitCard> = emptyList(),
+    val archived: List<Habit> = emptyList(),
+)
 
 class HabitsViewModel(
     habits: HabitRepository,
@@ -122,7 +127,7 @@ class HabitsViewModel(
         viewModelScope.launch { restDays.value = plans.getAll().filter { it.isRestDay }.map { it.date }.toSet() }
     }
 
-    val state: StateFlow<HabitsState> = combine(habits.observeHabits(), habits.observeCompletions(), clock.todayFlow(), restDays) { list, completions, today, rest ->
+    val state: StateFlow<HabitsState> = combine(habits.observeHabits(), habits.observeCompletions(), clock.todayFlow(), restDays, habits.observeArchived()) { list, completions, today, rest, archived ->
         val zone = clock.timeZone()
         val byHabit = completions.groupBy { it.habitId }.mapValues { (_, v) -> v.map { it.date }.toSet() }
         HabitsState(
@@ -140,6 +145,7 @@ class HabitsViewModel(
                     doneToday = today in done,
                 )
             },
+            archived = archived,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HabitsState())
 
@@ -153,6 +159,11 @@ class HabitsViewModel(
     fun archive(habit: Habit) = runAction(messages) {
         archive(habit.id)
         messages.post(AppMessage("Archived ${habit.title}", "Undo") { archive.restore(habit.id) })
+    }
+
+    fun restore(habit: Habit) = runAction(messages) {
+        archive.restore(habit.id)
+        messages.post("${habit.title} is back in your habits")
     }
 }
 
@@ -188,6 +199,40 @@ fun HabitsScreen(contentPadding: PaddingValues, onNewHabit: () -> Unit, onEditHa
             item { EmptyState("🌱", "No habits yet", "Start small: reading, a walk, a moment of reflection.", actionLabel = "Create a habit", onAction = onNewHabit) }
         }
         items(state.cards, key = { it.habit.id }) { card -> HabitCardView(card, today, viewModel, onEditHabit) }
+        if (state.archived.isNotEmpty()) {
+            item(key = "archived") { ArchivedHabits(state.archived, viewModel::restore) }
+        }
+    }
+}
+
+/** Archived habits stay out of the way, collapsed by default, but can always be brought back with their history. */
+@Composable
+private fun ArchivedHabits(archived: List<Habit>, onRestore: (Habit) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Column {
+        SectionHeader(
+            "Archived (${archived.size})",
+            actionLabel = if (expanded) "Hide" else "Show",
+            onAction = { expanded = !expanded },
+        )
+        if (expanded) {
+            BloomCard(tonal = true) {
+                archived.forEach { h ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        IconTile(h.emoji, size = 40.dp)
+                        Text(
+                            h.title,
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f).padding(horizontal = Spacing.md),
+                        )
+                        TextButton(
+                            onClick = { onRestore(h) },
+                            modifier = Modifier.semantics { contentDescription = "Restore ${h.title}" },
+                        ) { Text("Restore") }
+                    }
+                }
+            }
+        }
     }
 }
 

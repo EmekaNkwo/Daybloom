@@ -89,6 +89,7 @@ class RoomPlanRepository(private val dao: DailyPlanDao) : PlanRepository {
 
 class RoomHabitRepository(private val dao: HabitDao) : HabitRepository {
     override fun observeHabits(): Flow<List<Habit>> = dao.observeActive().map { list -> list.map { it.toDomain() } }
+    override fun observeArchived(): Flow<List<Habit>> = dao.observeArchived().map { list -> list.map { it.toDomain() } }
     override fun observeCompletions(): Flow<List<HabitCompletion>> = dao.observeCompletions().map { list -> list.mapNotNull { it.toDomain() } }
     override suspend fun getHabits(): List<Habit> = dao.getAll().map { it.toDomain() }
     override suspend fun get(id: String): Habit? = dao.get(id)?.toDomain()

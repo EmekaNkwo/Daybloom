@@ -45,6 +45,32 @@ final class NotificationAdapterTests: XCTestCase {
         try await probe.cancel(id: id)
     }
 
+    /// End to end with the real notification center: a reminder fires, then the app's sync step cancels its record.
+    /// The delivered notification must stay in Notification Center; only an explicit cancel (Done, delete) removes it.
+    func testDeliveredNotificationSurvivesSyncAndIsRemovedOnlyWhenAsked() async throws {
+        try await requireSchedulingPermission()
+        let center = UNUserNotificationCenter.current()
+        let id = "probe-\(UUID().uuidString)"
+        try await probe.schedule(id: id, title: "Delivery probe", secondsFromNow: 2)
+
+        var delivered = false
+        for _ in 0..<30 where !delivered {
+            try await _Concurrency.Task.sleep(nanoseconds: 500_000_000)
+            delivered = await center.deliveredNotifications().contains { $0.request.identifier == id }
+        }
+        XCTAssertTrue(delivered, "the scheduled notification is delivered by iOS")
+
+        try await probe.cancelKeepingDelivered(id: id)
+        try await _Concurrency.Task.sleep(nanoseconds: 500_000_000)
+        let afterSync = await center.deliveredNotifications().map { $0.request.identifier }
+        XCTAssertTrue(afterSync.contains(id), "syncing after it fired leaves the notification on screen")
+
+        try await probe.cancel(id: id)
+        try await _Concurrency.Task.sleep(nanoseconds: 500_000_000)
+        let afterCancel = await center.deliveredNotifications().map { $0.request.identifier }
+        XCTAssertFalse(afterCancel.contains(id), "an explicit cancel clears it")
+    }
+
     func testRespectsTheSixtyFourNotificationLimit() async throws {
         let max = try await probe.maxPending()
         XCTAssertLessThanOrEqual(max.intValue, 64)

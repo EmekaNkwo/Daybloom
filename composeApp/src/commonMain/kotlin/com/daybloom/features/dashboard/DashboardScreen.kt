@@ -69,6 +69,7 @@ import com.daybloom.domain.models.QuestStatus
 import com.daybloom.domain.models.QuestType
 import com.daybloom.domain.services.Suggestion
 import com.daybloom.domain.services.SuggestionAction
+import com.daybloom.features.reminders.OnTimeRemindersCard
 import org.koin.compose.viewmodel.koinViewModel
 
 /** Navigation callbacks the dashboard needs. Kept as one object so the screen stays decoupled from NavController. */
@@ -108,6 +109,7 @@ fun DashboardScreen(nav: DashboardNavigation, contentPadding: PaddingValues, vie
         val block = Modifier.padding(top = Spacing.itemGap)
         item { Header(state, nav) }
         item { ScoreCard(state, nav, block) }
+        item { OnTimeRemindersCard(block) }
 
         items(state.suggestions, key = { it.key }) { suggestion ->
             SuggestionCard(

@@ -11,6 +11,9 @@ final class DayBloomUITests: XCTestCase {
         app = XCUIApplication()
         app.launch()
         completeOnboardingIfNeeded()
+        // A level-up earned in an earlier run is celebrated on the next launch; acknowledge it like a person would.
+        let celebration = element("Keep growing")
+        if celebration.waitForExistence(timeout: 3) { celebration.tap() }
         XCTAssertTrue(element("Today").waitForExistence(timeout: 15), "main tabs are shown")
     }
 
@@ -92,6 +95,64 @@ final class DayBloomUITests: XCTestCase {
         }
     }
 
+    func testCreateReminderThenDeleteAndUndo() throws {
+        let title = uniqueName("Call")
+        tap("Settings")
+        tap("Reminder status & permissions")
+        tap("New")
+        let field = app.textViews.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap()
+        app.typeText(title)
+        tap("Save")
+        XCTAssertTrue(reveal(element("More for \(title)")), "new reminder is listed (it defaults to the next full hour, so it's accepted)")
+
+        tap("More for \(title)")
+        tap("Delete")
+        XCTAssertTrue(element("Undo").waitForExistence(timeout: 5), "deleting offers Undo")
+        tap("Undo")
+        XCTAssertTrue(reveal(element("More for \(title)")), "undo brings the reminder back")
+    }
+
+    func testTurningOffGamificationHidesTheGardenAndBack() throws {
+        tap("Settings")
+        let toggle = element(beginningWith: "XP, quests & Bloom Garden")
+        XCTAssertTrue(reveal(toggle), "gamification setting is shown")
+        toggle.tap()
+        tap("Back")
+        tap("Bloom")
+        XCTAssertTrue(element("Gamification is off", excludingButtons: true).waitForExistence(timeout: 5), "Bloom explains it's off")
+
+        // Turn it back on from the Bloom tab so later runs start from the default.
+        tap("Open settings")
+        let again = element(beginningWith: "XP, quests & Bloom Garden")
+        XCTAssertTrue(reveal(again))
+        again.tap()
+        tap("Back")
+        tap("Bloom")
+        XCTAssertTrue(element("Bloom Garden", excludingButtons: true).waitForExistence(timeout: 5), "garden is back")
+    }
+
+    func testPlanMyDayStarsATopPriority() throws {
+        let title = uniqueName("Plan")
+        quickAdd("\(title) today")
+        tap("Today")
+        openPlanner()
+        // Up to three top priorities are allowed and earlier runs may have used them; clear them first.
+        let existingTop = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Remove ' AND label ENDSWITH ' from top priorities'")).firstMatch
+        for _ in 0..<3 where reveal(existingTop) { existingTop.tap() }
+        tap("Make \(title) a top priority")
+        XCTAssertTrue(element("Remove \(title) from top priorities").waitForExistence(timeout: 3), "star toggles on")
+        tap("Save plan")
+        let keep = element("Keep my plan")
+        if keep.waitForExistence(timeout: 2) { keep.tap() } // the sample day may already be over capacity
+        XCTAssertTrue(element("TODAY'S PRODUCTIVITY", excludingButtons: true).waitForExistence(timeout: 5), "saving returns to Today")
+        XCTAssertTrue(reveal(element("Edit plan")), "once saved, Today offers to edit the plan")
+
+        tap("Edit plan")
+        XCTAssertTrue(reveal(element("Remove \(title) from top priorities")), "the saved plan keeps the priority")
+    }
+
     // MARK: - Helpers
 
     /// Adds a task through quick capture and waits until the sheet has closed (i.e. it was saved).
@@ -109,7 +170,11 @@ final class DayBloomUITests: XCTestCase {
         let field = app.textViews.firstMatch
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         field.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5), "keyboard is up")
         app.typeText(text)
+        // Fast typing must land exactly: the field once lagged behind the filtered list and lost or reordered keys.
+        let typed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", text), object: field)
+        XCTAssertEqual(XCTWaiter().wait(for: [typed], timeout: 3), .completed, "search field shows exactly what was typed, got '\(field.label)'")
         app.keyboards.buttons["search"].tap()
         sleep(1)
     }
@@ -123,6 +188,17 @@ final class DayBloomUITests: XCTestCase {
             ? NSPredicate(format: "elementType != %d AND label == %@", XCUIElement.ElementType.button.rawValue, label)
             : NSPredicate(format: "label == %@", label)
         return app.descendants(matching: .any).matching(predicate).firstMatch
+    }
+
+    /// Today's planner button reads "Plan my day" until a plan is saved, then "Edit plan" (an earlier run may have saved one).
+    private func openPlanner() {
+        let button = app.buttons.matching(NSPredicate(format: "label == 'Plan my day' OR label == 'Edit plan'")).firstMatch
+        XCTAssertTrue(reveal(button), "planner button is on Today")
+        button.tap()
+    }
+
+    private func element(beginningWith prefix: String) -> XCUIElement {
+        app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", prefix)).firstMatch
     }
 
     /// A button or text whose label contains [text] — never a text field, whose typed value would match trivially.

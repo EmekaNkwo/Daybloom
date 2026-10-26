@@ -25,6 +25,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import com.daybloom.design.Spacing
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.TooltipAnchorPosition
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 
 /**
  * Button hierarchy:
@@ -141,5 +152,25 @@ fun SwitchRow(
         }
         // The row handles toggling; the switch only shows the state.
         Switch(checked = checked, onCheckedChange = null)
+    }
+}
+
+/**
+ * An ⓘ button that explains [text] in a tooltip on tap (or long-press / hover). Keeps secondary explanations out of
+ * dense rows; [subject] names what is explained, for screen readers ("About Task completion").
+ */
+@Composable
+fun InfoTooltip(text: String, subject: String, modifier: Modifier = Modifier) {
+    val state = rememberTooltipState(isPersistent = true)
+    val scope = rememberCoroutineScope()
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+        tooltip = { PlainTooltip { Text(text) } },
+        state = state,
+        modifier = modifier,
+    ) {
+        IconButton(onClick = { scope.launch { state.show() } }) {
+            Icon(Icons.Outlined.Info, contentDescription = "About $subject", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }

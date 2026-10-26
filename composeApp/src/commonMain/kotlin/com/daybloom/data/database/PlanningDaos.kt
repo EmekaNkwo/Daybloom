@@ -115,6 +115,9 @@ interface HabitDao {
     @Query("SELECT * FROM habits WHERE archived = 0 ORDER BY createdAt")
     fun observeActive(): Flow<List<HabitEntity>>
 
+    @Query("SELECT * FROM habits WHERE archived = 1 ORDER BY title COLLATE NOCASE")
+    fun observeArchived(): Flow<List<HabitEntity>>
+
     @Query("SELECT * FROM habits")
     suspend fun getAll(): List<HabitEntity>
 

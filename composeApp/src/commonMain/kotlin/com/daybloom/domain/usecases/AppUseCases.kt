@@ -66,9 +66,10 @@ class ResetAllDataUseCase(
     private val reconciler: ReminderReconciler,
 ) {
     suspend operator fun invoke(keepPreferences: Boolean = false) {
+        // Cancel while the scheduled records still exist; after the wipe there'd be nothing to cancel by id.
+        reconciler.cancelAll()
         data.deleteAllData()
         if (!keepPreferences) preferences.reset()
-        // With no reminders left, reconciliation cancels every DayBloom notification the OS still holds.
         reconciler.reconcile(ReconcileReason.REMINDER_CHANGED)
     }
 }

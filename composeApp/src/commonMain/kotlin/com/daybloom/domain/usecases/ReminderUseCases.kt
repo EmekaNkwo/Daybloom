@@ -185,11 +185,14 @@ class SyncSourceRemindersUseCase(
     }
 
     private suspend fun updateTaskReminders(task: Task, transform: (Reminder) -> Reminder) {
-        val list = reminders.getForSource(ReminderSource.TASK, task.seriesId)
-        if (list.isEmpty()) return
-        list.forEach { reminders.save(transform(it).copy(updatedAt = clock.now())) }
+        reminders.getForSource(ReminderSource.TASK, task.seriesId)
+            .forEach { reminders.save(transform(it).copy(updatedAt = clock.now())) }
+        // Always reconcile: even a task without its own reminders changes the daily digests.
         reconcile()
     }
+
+    /** Re-derives the daily task digests after a task change that touches no reminder of its own. */
+    suspend fun refreshTaskDigests() = reconcile()
 
     private suspend fun reconcile() {
         reconciler.reconcile(ReconcileReason.REMINDER_CHANGED)

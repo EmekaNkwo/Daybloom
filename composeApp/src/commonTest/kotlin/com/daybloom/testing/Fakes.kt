@@ -89,6 +89,8 @@ class SequentialIds(private val prefix: String = "id") : IdGenerator {
 
 class FakeNotificationScheduler(
     var caps: SchedulerCapabilities = SchedulerCapabilities(maxPending = 64, exactTiming = true),
+    /** iOS lists everything pending; Android can only probe the ids it's asked about (pass false). */
+    private val enumeratesAll: Boolean = true,
 ) : NotificationScheduler {
     val pending = linkedMapOf<String, NotificationRequest>()
     val scheduleCalls = mutableListOf<NotificationRequest>()
@@ -105,7 +107,8 @@ class FakeNotificationScheduler(
     override suspend fun cancel(ids: Collection<String>, removeDelivered: Boolean) {
         ids.forEach { pending.remove(it); cancelCalls += it; if (removeDelivered) removedDelivered += it }
     }
-    override suspend fun pendingIds(candidates: Collection<String>): Set<String> = pending.keys.toSet()
+    override suspend fun pendingIds(candidates: Collection<String>): Set<String> =
+        if (enumeratesAll) pending.keys.toSet() else pending.keys.intersect(candidates.toSet())
     override suspend fun showNow(request: NotificationRequest) {
         shown += request
     }
@@ -146,7 +149,9 @@ class InMemoryStore {
     val wins = MutableStateFlow<Map<String, ManualWin>>(emptyMap())
     val breaks = MutableStateFlow<List<Pair<String, LocalDate>>>(emptyList())
     val dismissals = MutableStateFlow<Map<String, Instant?>>(emptyMap())
-    val preferences = MutableStateFlow(UserPreferences(onboardingComplete = true))
+    // Digests are off by default here so tests that count pending notifications see only their own reminders;
+    // DailyTaskDigestTest turns them on.
+    val preferences = MutableStateFlow(UserPreferences(onboardingComplete = true, morningDigestTime = null, eveningDigestTime = null))
 }
 
 class InMemoryTaskRepository(private val s: InMemoryStore) : TaskRepository {
@@ -219,6 +224,7 @@ class InMemoryPlanRepository(private val s: InMemoryStore) : PlanRepository {
 
 class InMemoryHabitRepository(private val s: InMemoryStore) : HabitRepository {
     override fun observeHabits() = s.habits.map { m -> m.values.filter { !it.archived } }
+    override fun observeArchived() = s.habits.map { m -> m.values.filter { it.archived }.sortedBy { it.title.lowercase() } }
     override fun observeCompletions() = s.habitCompletions.map { it.toList() }
     override suspend fun getHabits() = s.habits.value.values.toList()
     override suspend fun get(id: String) = s.habits.value[id]

@@ -20,4 +20,10 @@ data class UserPreferences(
     val lastCelebratedLevel: Int = 1,
     val onboardingComplete: Boolean = false,
     val planningReminderTime: LocalTime? = null,
+    /** Morning heads-up for tasks set ahead for the day; null turns it off. */
+    val morningDigestTime: LocalTime? = LocalTime(8, 0),
+    /** End-of-day nudge listing tasks still open; null turns it off. */
+    val eveningDigestTime: LocalTime? = LocalTime(20, 0),
+    /** The user chose "Not now" on the Today-screen prompt to allow on-time (exact) reminders. */
+    val exactAlarmPromptDismissed: Boolean = false,
 )

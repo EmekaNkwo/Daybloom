@@ -19,6 +19,7 @@ import com.daybloom.domain.usecases.TaskResult
 import com.daybloom.gamification.QuestCatalog
 import com.daybloom.notifications.ReconcileReason
 import com.daybloom.testing.TestGraph
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
@@ -211,5 +212,19 @@ class EndToEndWorkflowTest {
         g.archiveHabit.restore(habit.id)
         assertEquals(false, g.habits.get(habit.id)?.archived)
         assertEquals(scheduled, g.scheduler.pending.size, "restoring brings the reminders back")
+    }
+
+    @Test
+    fun `archived habits are listed separately until restored`() = runTest {
+        val g = TestGraph()
+        val habit = assertIs<SaveHabitUseCase.Result.Saved>(g.saveHabit(HabitDraft("Stretch"))).habit
+
+        g.archiveHabit(habit.id)
+        assertEquals(listOf(habit.id), g.habits.observeArchived().first().map { it.id })
+        assertTrue(g.habits.observeHabits().first().none { it.id == habit.id })
+
+        g.archiveHabit.restore(habit.id)
+        assertTrue(g.habits.observeArchived().first().isEmpty())
+        assertEquals(listOf(habit.id), g.habits.observeHabits().first().map { it.id })
     }
 }

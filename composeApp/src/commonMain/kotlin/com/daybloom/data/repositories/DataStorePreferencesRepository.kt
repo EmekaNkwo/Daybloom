@@ -17,6 +17,7 @@ import com.daybloom.domain.models.ThemeMode
 import com.daybloom.domain.models.UnfinishedTaskPolicy
 import com.daybloom.domain.models.UserPreferences
 import com.daybloom.domain.repositories.PreferencesRepository
+import kotlinx.datetime.LocalTime
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
@@ -74,6 +75,9 @@ class DataStorePreferencesRepository(private val store: DataStore<Preferences>) 
             lastCelebratedLevel = (this[Keys.LAST_LEVEL] ?: defaults.lastCelebratedLevel).coerceAtLeast(1),
             onboardingComplete = this[Keys.ONBOARDED] ?: defaults.onboardingComplete,
             planningReminderTime = this[Keys.PLANNING_REMINDER]?.toLocalTimeOrNull(),
+            morningDigestTime = this[Keys.MORNING_DIGEST].digestTime(defaults.morningDigestTime),
+            eveningDigestTime = this[Keys.EVENING_DIGEST].digestTime(defaults.eveningDigestTime),
+            exactAlarmPromptDismissed = this[Keys.EXACT_PROMPT_DISMISSED] ?: defaults.exactAlarmPromptDismissed,
         )
     }
 
@@ -98,6 +102,20 @@ class DataStorePreferencesRepository(private val store: DataStore<Preferences>) 
         this[Keys.ONBOARDED] = p.onboardingComplete
         val planning = p.planningReminderTime
         if (planning != null) this[Keys.PLANNING_REMINDER] = planning.toStorage() else remove(Keys.PLANNING_REMINDER)
+        // Digests default to on, so "off" is stored explicitly rather than as a missing key.
+        this[Keys.MORNING_DIGEST] = p.morningDigestTime?.toStorage() ?: DIGEST_OFF
+        this[Keys.EVENING_DIGEST] = p.eveningDigestTime?.toStorage() ?: DIGEST_OFF
+        this[Keys.EXACT_PROMPT_DISMISSED] = p.exactAlarmPromptDismissed
+    }
+
+    private fun String?.digestTime(default: LocalTime?): LocalTime? = when (this) {
+        null -> default
+        DIGEST_OFF -> null
+        else -> toLocalTimeOrNull() ?: default
+    }
+
+    private companion object {
+        const val DIGEST_OFF = "off"
     }
 
     private object Keys {
@@ -118,5 +136,8 @@ class DataStorePreferencesRepository(private val store: DataStore<Preferences>) 
         val LAST_LEVEL = intPreferencesKey("last_celebrated_level")
         val ONBOARDED = booleanPreferencesKey("onboarding_complete")
         val PLANNING_REMINDER = stringPreferencesKey("planning_reminder_time")
+        val MORNING_DIGEST = stringPreferencesKey("morning_digest_time")
+        val EVENING_DIGEST = stringPreferencesKey("evening_digest_time")
+        val EXACT_PROMPT_DISMISSED = booleanPreferencesKey("exact_alarm_prompt_dismissed")
     }
 }

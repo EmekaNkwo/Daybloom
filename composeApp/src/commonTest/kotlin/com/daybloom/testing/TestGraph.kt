@@ -68,7 +68,7 @@ class TestGraph(
     val preferences = InMemoryPreferencesRepository(store)
     val dismissals = InMemoryDismissals(store)
 
-    val reconciler = ReminderReconciler(reminders, scheduler, permissions, preferences, clock)
+    val reconciler = ReminderReconciler(reminders, scheduler, permissions, preferences, tasks, clock)
     val awardXp = AwardExperiencePointsUseCase(xp, clock)
     val buildInput = BuildDayScoreInputUseCase(tasks, plans, focus, habits, appointments, preferences, clock)
     val calculateScore = CalculateDailyProductivityScoreUseCase(buildInput, scores, preferences, clock, ProductivityScoreCalculator())

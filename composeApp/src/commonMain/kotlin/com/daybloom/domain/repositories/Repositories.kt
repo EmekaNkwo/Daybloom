@@ -93,6 +93,7 @@ interface PlanRepository {
 
 interface HabitRepository {
     fun observeHabits(): Flow<List<Habit>>
+    fun observeArchived(): Flow<List<Habit>>
     fun observeCompletions(): Flow<List<HabitCompletion>>
     suspend fun getHabits(): List<Habit>
     suspend fun get(id: String): Habit?

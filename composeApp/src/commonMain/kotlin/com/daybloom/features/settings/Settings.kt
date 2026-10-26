@@ -1,5 +1,6 @@
 package com.daybloom.features.settings
 
+import com.daybloom.components.InfoTooltip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -70,6 +71,9 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.datetime.LocalTime
+import com.daybloom.notifications.ExactTimingState
+import com.daybloom.notifications.NotificationPermissionManager
+import kotlinx.coroutines.flow.map
 import org.koin.compose.viewmodel.koinViewModel
 import com.daybloom.components.BloomButtons
 import com.daybloom.components.BloomTextField
@@ -84,9 +88,17 @@ class SettingsViewModel(
     private val process: ProcessProgressUseCase,
     private val reconciler: ReminderReconciler,
     private val reminderSync: SyncSourceRemindersUseCase,
+    private val permissions: NotificationPermissionManager,
     private val messages: AppMessages,
 ) : ViewModel() {
     val state: StateFlow<UserPreferences?> = preferences.preferences.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Android without exact-alarm access may deliver reminders up to an hour late. */
+    val onTimeRemindersOff: StateFlow<Boolean> = reconciler.status
+        .map { it.status?.exactTiming == ExactTimingState.RESTRICTED }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    fun allowOnTimeReminders() = permissions.openExactTimingSettings()
 
     fun update(transform: (UserPreferences) -> UserPreferences) = runAction(messages) { preferences.update(transform) }
 
@@ -111,6 +123,16 @@ class SettingsViewModel(
         reminderSync.setPlanningReminder(time)
     }
 
+    fun setMorningDigest(time: LocalTime?) = runAction(messages) {
+        preferences.update { it.copy(morningDigestTime = time) }
+        reconciler.reconcile(ReconcileReason.REMINDER_CHANGED)
+    }
+
+    fun setEveningDigest(time: LocalTime?) = runAction(messages) {
+        preferences.update { it.copy(eveningDigestTime = time) }
+        reconciler.reconcile(ReconcileReason.REMINDER_CHANGED)
+    }
+
     fun loadSample() = runAction(messages, "Couldn't add sample data.") {
         seed()
         messages.post("Sample tasks, an appointment and habits were added")
@@ -125,6 +147,7 @@ class SettingsViewModel(
 @Composable
 fun SettingsScreen(onBack: () -> Unit, onOpenReminders: () -> Unit, viewModel: SettingsViewModel = koinViewModel()) {
     val prefs by viewModel.state.collectAsStateWithLifecycle()
+    val onTimeRemindersOff by viewModel.onTimeRemindersOff.collectAsStateWithLifecycle()
     var confirmReset by remember { mutableStateOf(false) }
     var picker by remember { mutableStateOf<String?>(null) }
     Scaffold(topBar = { BloomTopBar("Settings", onBack = onBack) }) { padding ->
@@ -152,18 +175,26 @@ fun SettingsScreen(onBack: () -> Unit, onOpenReminders: () -> Unit, viewModel: S
                 val checked = d in p.enabledScoreDimensions
                 // At least one dimension must stay on, so the last checked one can't be unticked.
                 val canToggle = !(checked && p.enabledScoreDimensions.size == 1)
-                Row(
-                    Modifier.fillMaxWidth().toggleable(checked, enabled = canToggle, role = Role.Checkbox) { viewModel.toggleDimension(d) },
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Checkbox(checked, onCheckedChange = null, enabled = canToggle)
-                    Column(Modifier.weight(1f)) {
-                        Text("${d.label} · ${(d.defaultWeight * 100).toInt()}%", style = MaterialTheme.typography.bodyLarge)
-                        Text(d.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // The checkbox row toggles; the ⓘ beside it explains the dimension without crowding the list.
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        Modifier.weight(1f).heightIn(min = Spacing.minTouchTarget)
+                            .toggleable(checked, enabled = canToggle, role = Role.Checkbox) { viewModel.toggleDimension(d) },
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+                    ) {
+                        Checkbox(checked, onCheckedChange = null, enabled = canToggle)
+                        Text(d.label, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            "${(d.defaultWeight * 100).toInt()}%",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
+                    InfoTooltip(d.description, subject = d.label)
                 }
             }
-            Text("Daily focus goal", style = MaterialTheme.typography.bodyLarge)
+            Text("Daily focus goal", Modifier.padding(top = Spacing.sm), style = MaterialTheme.typography.bodyLarge)
             ChoiceChips(listOf(25, 45, 60, 90, 120, 180), p.dailyFocusGoalMinutes, { Format.compactMinutes(it) }, { m -> viewModel.updateScoring { it.copy(dailyFocusGoalMinutes = m) } })
             Text("Default available time when planning", style = MaterialTheme.typography.bodyLarge)
             ChoiceChips(listOf(120, 240, 360, 480, 600), p.defaultAvailableMinutes, { Format.compactMinutes(it) }, { m -> viewModel.update { it.copy(defaultAvailableMinutes = m) } })
@@ -191,6 +222,29 @@ fun SettingsScreen(onBack: () -> Unit, onOpenReminders: () -> Unit, viewModel: S
                     AssistChip(onClick = { picker = "quietEnd" }, label = { Text("Until ${Format.time(q.end)}") })
                 }
             }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Morning task summary", style = MaterialTheme.typography.bodyLarge)
+                    Text("Lists the tasks you set ahead for the day.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                AssistChip(onClick = { picker = "morningDigest" }, label = { Text(p.morningDigestTime?.let(Format::time) ?: "Off") })
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("End-of-day check-in", style = MaterialTheme.typography.bodyLarge)
+                    Text("Lists today's tasks that are still open.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                AssistChip(onClick = { picker = "eveningDigest" }, label = { Text(p.eveningDigestTime?.let(Format::time) ?: "Off") })
+            }
+            if (onTimeRemindersOff) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("On-time reminders", style = MaterialTheme.typography.bodyLarge)
+                        Text("Off — Android may deliver reminders up to an hour late.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    AssistChip(onClick = viewModel::allowOnTimeReminders, label = { Text("Allow") })
+                }
+            }
             OutlinedButton(onClick = onOpenReminders) { Text("Reminder status & permissions") }
 
             SectionHeader("Data")
@@ -203,6 +257,8 @@ fun SettingsScreen(onBack: () -> Unit, onOpenReminders: () -> Unit, viewModel: S
         val quiet = p.quietHours
         when (picker) {
             "planning" -> BloomTimePickerDialog(p.planningReminderTime ?: LocalTime(8, 0), { picker = null }, { t -> picker = null; viewModel.setPlanningReminder(t) }, allowClear = true)
+            "morningDigest" -> BloomTimePickerDialog(p.morningDigestTime ?: LocalTime(8, 0), { picker = null }, { t -> picker = null; viewModel.setMorningDigest(t) }, allowClear = true)
+            "eveningDigest" -> BloomTimePickerDialog(p.eveningDigestTime ?: LocalTime(20, 0), { picker = null }, { t -> picker = null; viewModel.setEveningDigest(t) }, allowClear = true)
             "quietStart" -> if (quiet != null) BloomTimePickerDialog(quiet.start, { picker = null }, { t -> picker = null; t?.takeIf { it != quiet.end }?.let { viewModel.setQuietHours(quiet.copy(start = it)) } })
             "quietEnd" -> if (quiet != null) BloomTimePickerDialog(quiet.end, { picker = null }, { t -> picker = null; t?.takeIf { it != quiet.start }?.let { viewModel.setQuietHours(quiet.copy(end = it)) } })
         }

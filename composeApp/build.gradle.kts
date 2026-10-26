@@ -51,6 +51,7 @@ kotlin {
             implementation(libs.compose.foundation)
             implementation(libs.compose.ui)
             implementation(libs.compose.ui.backhandler)
+            implementation(libs.compose.components.resources)
             implementation(libs.compose.material3)
             implementation(libs.compose.material.icons.extended)
             implementation(libs.androidx.lifecycle.viewmodel.compose)
@@ -135,4 +136,9 @@ dependencies {
         "kspIosSimulatorArm64",
     ).forEach { add(it, libs.room.compiler) }
     debugImplementation(libs.compose.ui.tooling)
+}
+
+compose.resources {
+    packageOfResClass = "com.daybloom.resources"
+    generateResClass = always
 }

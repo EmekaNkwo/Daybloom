@@ -16,6 +16,7 @@ import com.daybloom.features.habits.HabitsViewModel
 import com.daybloom.features.insights.InsightsViewModel
 import com.daybloom.features.insights.RecapViewModel
 import com.daybloom.features.planner.PlannerViewModel
+import com.daybloom.features.reminders.OnTimeRemindersViewModel
 import com.daybloom.features.reminders.ReminderEditorViewModel
 import com.daybloom.features.reminders.RemindersViewModel
 import com.daybloom.features.settings.SettingsViewModel
@@ -41,6 +42,7 @@ val viewModelModule = module {
     viewModelOf(::BloomViewModel)
     viewModelOf(::InsightsViewModel)
     viewModelOf(::RemindersViewModel)
+    viewModelOf(::OnTimeRemindersViewModel)
     viewModelOf(::SettingsViewModel)
 
     viewModel { (args: TaskEditorArgs) -> TaskEditorViewModel(args, get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }

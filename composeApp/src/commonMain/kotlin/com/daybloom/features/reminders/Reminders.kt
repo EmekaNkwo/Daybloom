@@ -233,8 +233,8 @@ private fun DeliveryCard(state: RemindersState, viewModel: RemindersViewModel) {
             }
         }
         if (status?.exactTiming == ExactTimingState.RESTRICTED) {
-            Text("⏱ Exact timing is off. Reminders may arrive a few minutes late.", style = MaterialTheme.typography.bodySmall, color = BloomTheme.colors.warning)
-            TextButton(onClick = viewModel::openExactSettings, modifier = Modifier.offset(x = -Spacing.md)) { Text("Allow exact alarms") }
+            Text("⏱ On-time reminders are off. Android may deliver them up to an hour late.", style = MaterialTheme.typography.bodySmall, color = BloomTheme.colors.warning)
+            TextButton(onClick = viewModel::openExactSettings, modifier = Modifier.offset(x = -Spacing.md)) { Text("Allow on-time reminders") }
         }
         caps?.limitation?.takeIf { status?.exactTiming != ExactTimingState.RESTRICTED }?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -12,7 +12,7 @@ All data stays on the device. There is no account, server or network access.
   recurrence and a done list
 - **Calendar** with agenda, day, week and month views across tasks and appointments
 - **Planner** that fits the day's tasks to your available capacity and handles unfinished tasks
-- **Habits** with weekly targets and streaks
+- **Habits** with weekly targets and streaks; archived habits can be restored from the Habits tab
 - **Reminders** with recurrence, time-zone pinning and visible delivery status
 - **Focus** timer linked to tasks, with daily totals
 - **Insights** and a shareable monthly recap (exported as a text file); a configurable productivity score
@@ -31,9 +31,10 @@ composeApp/            Shared Kotlin module (UI, domain, data) → Android libra
   src/androidUnitTest/ Robolectric tests: Room persistence, migrations, Android notifications
   src/androidInstrumentedTest/  On-device tests: database, alarms, channels, permissions
   src/iosTest/         Kotlin/Native persistence tests
+  src/commonMain/composeResources/  Bundled Poppins font (SIL Open Font License, text in files/licenses/)
   schemas/             Exported Room schemas (used by migration tests)
 androidApp/            Android application shell (Application, Activity, manifest, resources)
-iosApp/                Xcode project: SwiftUI host app + iosAppTests (XCTest)
+iosApp/                Xcode project: SwiftUI host app, iosAppTests (XCTest) and iosAppUITests (UI flows)
 ```
 
 ## Requirements
@@ -77,7 +78,8 @@ Xcode 16's SDK lacks. Remove it when building with Xcode 26+ for faster debug bu
 ./gradlew :composeApp:connectedDebugAndroidTest  # on-device tests (needs a running emulator/device)
 ```
 
-Swift-side notification tests live in `iosApp/iosAppTests` and run from Xcode (Product → Test) or:
+Swift-side notification tests live in `iosApp/iosAppTests`, and end-to-end UI flows (tasks, habits, appointments,
+focus, reminders, settings, planner) in `iosApp/iosAppUITests`. Both run from Xcode (Product → Test) or:
 
 ```bash
 xcodebuild test -project iosApp/iosApp.xcodeproj -scheme iosApp \

@@ -1,5 +1,6 @@
 package com.daybloom.notifications
 
+import com.daybloom.domain.models.NotificationCategory
 import kotlinx.coroutines.suspendCancellableCoroutine
 import platform.Foundation.NSCalendar
 import platform.Foundation.NSCalendarUnitDay
@@ -90,7 +91,8 @@ class IosNotificationScheduler : NotificationScheduler {
             setTitle(request.title)
             setBody(request.body.ifBlank { "Reminder from DayBloom" })
             setSound(UNNotificationSound.defaultSound)
-            setCategoryIdentifier(IosNotificationContract.CATEGORY_REMINDER)
+            // Digests summarise several tasks, so they get no Done / Snooze actions.
+            if (request.category != NotificationCategory.DIGEST) setCategoryIdentifier(IosNotificationContract.CATEGORY_REMINDER)
             setThreadIdentifier(request.category.channelId)
             setUserInfo(
                 mapOf(

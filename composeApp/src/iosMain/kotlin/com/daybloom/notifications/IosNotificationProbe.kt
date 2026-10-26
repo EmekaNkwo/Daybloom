@@ -22,5 +22,8 @@ object IosNotificationProbe {
 
     suspend fun cancel(id: String) = scheduler.cancel(listOf(id))
 
+    /** What the reminder reconciler does for a notification that has already fired: forget the alarm, keep what's on screen. */
+    suspend fun cancelKeepingDelivered(id: String) = scheduler.cancel(listOf(id), removeDelivered = false)
+
     suspend fun maxPending(): Int = scheduler.capabilities().maxPending
 }

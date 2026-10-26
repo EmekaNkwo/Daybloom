@@ -43,7 +43,7 @@ fun DayBloomTheme(
     ) {
         MaterialTheme(
             colorScheme = if (dark) DarkBloomScheme else LightBloomScheme,
-            typography = BloomTypography,
+            typography = bloomTypography(),
             shapes = BloomShapes,
             content = content,
         )
